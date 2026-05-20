@@ -204,6 +204,98 @@ class GenerateRequest(BaseModel):
         return d
 
 
+class ManualRequest(BaseModel):
+    api_key: str = ""
+    api_url: str = ""
+    image_model_name: str = ""
+    prompt: str = ""
+    ratio: str = "single"  # "single", "lr", "tb"
+    count: int = Field(default=1, ge=1, le=20)
+
+
+def run_manual_generation(body: "ManualRequest") -> dict:
+    images: list = []
+    errors: list = []
+    warnings: list = []
+    batch_id = allocate_batch_id(OUTPUT_ROOT)
+    batch_dir = OUTPUT_ROOT / str(batch_id)
+    os.makedirs(batch_dir, exist_ok=True)
+
+    base_url = body.api_url.rstrip("/") + "/images/generations"
+    headers = {"Authorization": f"Bearer {body.api_key}", "Content-Type": "application/json"}
+    prompt = (body.prompt or "").strip()
+
+    if not prompt:
+        return {"images": [], "errors": ["请输入提示词"], "batch_id": batch_id}
+
+    if not body.api_key.strip():
+        return {"images": [], "errors": ["请配置 API 密钥"], "batch_id": batch_id}
+
+    # Size for all manual ratios: 1024x1024
+    size = "1024x1024"
+    ratio_suffix = {KIND_TEXT_SINGLE: _TEXT_SINGLE_SUFFIX, KIND_LR_SPLIT: _LR_SPLIT_SUFFIX, KIND_TB_SPLIT: _TB_SPLIT_SUFFIX}.get(body.ratio, _TEXT_SINGLE_SUFFIX)
+    full_prompt = f"{prompt}, {ratio_suffix}"
+
+    seq = 0
+    seq_lock = threading.Lock()
+
+    def fetch_one(i):
+        nonlocal seq
+        if not body.api_key.strip():
+            return None
+        payload = {"model": body.image_model_name, "prompt": full_prompt, "size": size, "n": 1}
+        try:
+            r = requests.post(base_url, json=payload, headers=headers, timeout=120)
+            if r.status_code >= 400:
+                errors.append(f"第{i + 1}张 HTTP {r.status_code}: {_api_error_snippet(r)}")
+                return None
+            j = r.json()
+            data = j.get("data")
+            if not isinstance(data, list) or not data:
+                errors.append(f"第{i + 1}张 无 data")
+                return None
+            item = data[0]
+            img_bytes = None
+            if isinstance(item, dict):
+                if item.get("url"):
+                    ir = requests.get(item["url"], timeout=120)
+                    img_bytes = ir.content if ir.status_code < 400 else None
+                elif item.get("b64_json"):
+                    img_bytes = base64.b64decode(item["b64_json"])
+            if not img_bytes:
+                errors.append(f"第{i + 1}张 无法获取图片数据")
+                return None
+            with seq_lock:
+                seq += 1
+                s = seq
+            fname = f"{batch_id}-manual-{s}.png"
+            fpath = batch_dir / fname
+            with open(fpath, "wb") as f:
+                f.write(img_bytes)
+            rel = f"/static/output/{batch_id}/{fname}"
+            save_to_history(full_prompt, rel, batch_id, body.ratio)
+            return rel
+        except Exception as e:
+            errors.append(f"第{i + 1}张 {e}")
+            return None
+
+    workers = min(MAX_CONCURRENT_IMAGES, body.count)
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = [executor.submit(fetch_one, i) for i in range(body.count)]
+        for future in as_completed(futures):
+            result = future.result()
+            if result:
+                images.append(result)
+
+    return {
+        "images": images,
+        "errors": errors,
+        "warnings": warnings,
+        "batch_id": batch_id,
+        "message": f"完成 {len(images)}/{body.count} 张",
+    }
+
+
 def clamp_text(text: str, max_chars: int) -> str:
     t = (text or "").strip()
     if len(t) <= max_chars:
@@ -1041,11 +1133,11 @@ def run_full_generation_stream(body: GenerateRequest, queue: "asyncio.Queue", ma
 
     square_jobs = []
     for i in range(body.text_single_count):
-        square_jobs.append(("text_single", i, f"????{i + 1}"))
+        square_jobs.append(("text_single", i, f"带文字单图{i + 1}"))
     for i in range(body.lr_split_count):
-        square_jobs.append(("lr", i, f"????{i + 1}"))
+        square_jobs.append(("lr", i, f"左右分屏{i + 1}"))
     for i in range(body.tb_split_count):
-        square_jobs.append(("tb", i, f"????{i + 1}"))
+        square_jobs.append(("tb", i, f"上下分屏{i + 1}"))
 
     def emit_event(evt_type: str, data: dict):
         asyncio.run_coroutine_threadsafe(queue.put({"event": evt_type, "data": data}), main_loop)
@@ -1307,6 +1399,11 @@ def api_history_clear(date: str = ""):
     entries = [e for e in entries if not e.get("timestamp", "").startswith(date)]
     HISTORY_FILE.write_text(json.dumps(entries, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"status": "cleared", "date": date}
+
+
+@app.post("/api/generate-manual")
+def api_generate_manual(body: "ManualRequest"):
+    return run_manual_generation(body)
 
 
 @app.post("/api/generate")
