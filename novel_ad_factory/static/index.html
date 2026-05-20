@@ -71,7 +71,7 @@
             </div>
             <div class="col-span-2 rounded-lg border border-violet-100 bg-violet-50/60 p-3">
               <label class="mb-1 block text-xs font-semibold text-violet-800">弹屏视频（竖屏 9:16）</label>
-              <input id="popupCount" type="number" min="0" class="mt-1 w-full rounded-lg border border-violet-200 bg-white px-3 py-2 text-sm" value="1" />
+              <input id="popupCount" type="number" min="0" class="mt-1 w-full rounded-lg border border-violet-200 bg-white px-3 py-2 text-sm" value="0" />
             </div>
             <div class="col-span-2">
               <label class="mb-1 block text-xs font-medium text-slate-700">并发数 <span class="text-slate-400">(越大越快，建议1-5)</span></label>
@@ -104,7 +104,7 @@
           </div>
           <div>
             <label class="mb-1 block text-sm font-medium text-slate-700">最终提示词</label>
-            <textarea id="globalPrompt" rows="4" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none" placeholder="欧美写实、光影..."></textarea>
+            <textarea id="globalPrompt" rows="4" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none" placeholder="欧美写实、光影..." oninput="saveApiConfig()"></textarea>
           </div>
 
           <div class="space-y-3">
@@ -155,12 +155,12 @@
   <script>
     let lastPayloadUrls = [];
 
-    const API_CONFIG_DEFAULTS = { apiKey: "", apiUrl: "https://api.geeknow.top/v1", chatModel: "gpt-4o-mini", imageModel: "gpt-image-1" };
+    const API_CONFIG_DEFAULTS = { apiKey: "", apiUrl: "https://api.geeknow.top/v1", chatModel: "gpt-4o-mini", imageModel: "gpt-image-1", globalPrompt: "" };
 
     function saveApiConfig() {
       let cfg = {};
       try { cfg = JSON.parse(localStorage.getItem("novel_api_config")) || {}; } catch (e) {}
-      ["apiKey", "apiUrl", "chatModel", "imageModel"].forEach(id => {
+      ["apiKey", "apiUrl", "chatModel", "imageModel", "globalPrompt"].forEach(id => {
         const el = document.getElementById(id);
         if (el) cfg[id] = el.value;
       });
@@ -175,6 +175,7 @@
           document.getElementById("apiUrl").value = saved.apiUrl || API_CONFIG_DEFAULTS.apiUrl;
           document.getElementById("chatModel").value = saved.chatModel || API_CONFIG_DEFAULTS.chatModel;
           document.getElementById("imageModel").value = saved.imageModel || API_CONFIG_DEFAULTS.imageModel;
+          document.getElementById("globalPrompt").value = saved.globalPrompt || "";
         }
       } catch (e) { /* ignore */ }
     }
