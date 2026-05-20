@@ -116,17 +116,6 @@
           </div>
         </div>
 
-        <!-- history panel -->
-        <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
-          <div class="flex items-center justify-between border-b pb-2">
-            <h2 class="text-sm font-bold text-emerald-600 uppercase tracking-wider">????</h2>
-            <button onclick="clearHistory()" class="rounded border border-red-300 px-2 py-1 text-[10px] text-red-500 hover:bg-red-50">????</button>
-          </div>
-          <div id="historyList" class="max-h-96 overflow-y-auto space-y-2 text-xs">
-            <p class="text-slate-400">???...</p>
-          </div>
-        </div>
-
         <div id="resultSection" class="hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
           <div class="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
             <h2 class="text-lg font-bold text-slate-800">生产成果</h2>
@@ -141,6 +130,22 @@
           <div id="warnBox" class="hidden rounded-lg bg-amber-50 p-3 text-xs text-amber-900 whitespace-pre-wrap"></div>
           <div id="imageGallery" class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4"></div>
           <div id="videoList" class="space-y-4"></div>
+        </div>
+
+        <!-- history panel -->
+        <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
+          <div class="flex items-center justify-between border-b pb-2">
+            <h2 class="text-sm font-bold text-emerald-600 uppercase tracking-wider">历史记录</h2>
+            <div class="flex items-center gap-2">
+              <select id="historyDateFilter" onchange="onHistoryDateChange()" class="rounded border border-slate-300 px-2 py-1 text-[10px] outline-none">
+                <option value="">全部日期</option>
+              </select>
+              <button onclick="clearHistory()" class="rounded border border-red-300 px-2 py-1 text-[10px] text-red-500 hover:bg-red-50">清空</button>
+            </div>
+          </div>
+          <div id="historyList" class="max-h-96 overflow-y-auto space-y-2 text-xs">
+            <p class="text-slate-400">暂无记录...</p>
+          </div>
         </div>
       </div>
     </div>
@@ -179,7 +184,7 @@
           await new Promise(r => setTimeout(r, 350));
         }
       } catch (e) {
-        alert("?????" + e.message);
+        alert("下载失败: " + e.message);
       } finally {
         btn.disabled = false;
       }
@@ -194,7 +199,7 @@
       wrap.className = "relative overflow-hidden rounded-lg border border-slate-200 bg-slate-100 animate-pulse";
       wrap.innerHTML = `<img src="${full}" class="aspect-square w-full object-cover" loading="lazy" onload="this.parentElement.classList.remove('animate-pulse')" />
         <div class="absolute top-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-[9px] text-white">${label || ""}</div>
-        <button type="button" class="absolute bottom-1 right-1 rounded bg-black/70 px-2 py-0.5 text-[10px] text-white hover:bg-black">??</button>`;
+        <button type="button" class="absolute bottom-1 right-1 rounded bg-black/70 px-2 py-0.5 text-[10px] text-white hover:bg-black">下载</button>`;
       wrap.querySelector("button").onclick = () => downloadBlobUrl(full, name);
       gallery.appendChild(wrap);
       lastPayloadUrls.push({ url: full, name: name });
@@ -207,7 +212,7 @@
       const name = src.split("/").pop();
       const row = document.createElement("div");
       row.className = "space-y-2";
-      row.innerHTML = `<div class="flex items-center gap-2"><span class="text-xs font-bold">${title}</span><span class="${badge} rounded px-2 py-0.5 text-[10px]">??</span></div>
+      row.innerHTML = `<div class="flex items-center gap-2"><span class="text-xs font-bold">${title}</span><span class="${badge} rounded px-2 py-0.5 text-[10px]">视频</span></div>
         <div class="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
           <video src="${full}" controls class="max-h-48 rounded"></video>
           <button class="rounded bg-indigo-600 px-3 py-1 text-xs font-semibold text-white">${btnLabel}</button>
@@ -221,49 +226,93 @@
     // --- History functions ---
     async function loadHistory() {
       try {
-        const r = await fetch("/api/history");
+        const date = document.getElementById("historyDateFilter").value;
+        const url = date ? "/api/history?date=" + encodeURIComponent(date) : "/api/history";
+        const r = await fetch(url);
         const data = await r.json();
         renderHistory(data);
       } catch (e) {
-        document.getElementById("historyList").innerHTML = '<p class="text-slate-400">????</p>';
+        document.getElementById("historyList").innerHTML = '<p class="text-slate-400">加载失败</p>';
       }
+    }
+
+    async function loadHistoryDates() {
+      try {
+        const r = await fetch("/api/history/dates");
+        const dates = await r.json();
+        const sel = document.getElementById("historyDateFilter");
+        const currentVal = sel.value;
+        sel.innerHTML = '<option value="">全部日期</option>';
+        dates.forEach(d => {
+          const opt = document.createElement("option");
+          opt.value = d;
+          opt.textContent = d;
+          sel.appendChild(opt);
+        });
+        if (dates.includes(currentVal)) sel.value = currentVal;
+      } catch (e) { /* ignore */ }
+    }
+
+    function onHistoryDateChange() {
+      loadHistory();
+    }
+
+    function copyEncodedPrompt(el) {
+      const text = decodeURIComponent(el.getAttribute("data-prompt"));
+      navigator.clipboard.writeText(text).then(() => {
+        const toast = document.createElement("div");
+        toast.className = "fixed bottom-4 right-4 rounded bg-slate-800 px-3 py-2 text-xs text-white shadow-lg z-50";
+        toast.innerText = "提示词已复制";
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 1500);
+      }).catch(() => alert("复制失败"));
     }
 
     function renderHistory(entries) {
       const list = document.getElementById("historyList");
       if (!entries || !entries.length) {
-        list.innerHTML = '<p class="text-slate-400">??????</p>';
+        list.innerHTML = '<p class="text-slate-400">暂无历史记录</p>';
         return;
       }
       // Show newest first
       const reversed = [...entries].reverse();
       list.innerHTML = reversed.map((e, i) => {
-        const typeLabel = { text_single: "????", lr: "????", tb: "????", scroll: "??", popup_bg: "????" }[e.type] || e.type;
+        const typeLabel = { text_single: "文本单图", lr: "左右分屏", tb: "上下分屏", scroll: "滚屏", popup_bg: "弹屏" }[e.type] || e.type;
+        const prompt = e.prompt || "";
+        const promptDisplay = prompt.length > 60 ? prompt.slice(0, 60) + "..." : prompt;
+        const promptTitle = prompt.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         return `<div class="flex gap-2 rounded border border-slate-100 p-2 hover:bg-slate-50">
-          <img src="${absUrl(e.image_url)}" class="h-16 w-16 rounded object-cover flex-shrink-0 cursor-pointer" onclick="window.open('${absUrl(e.image_url)}')" title="??????" />
+          <img src="${absUrl(e.image_url)}" class="h-16 w-16 rounded object-cover flex-shrink-0 cursor-pointer" onclick="window.open('${absUrl(e.image_url)}')" title="点击查看大图" />
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-1"><span class="rounded bg-indigo-100 px-1 text-[10px] text-indigo-700">${typeLabel}</span><span class="text-[10px] text-slate-400">${e.timestamp}</span></div>
-            <p class="mt-0.5 truncate text-[11px] text-slate-600" title="${e.prompt.replace(/"/g, "'&quot;'")}">${e.prompt.length > 60 ? e.prompt.slice(0, 60) + "..." : e.prompt}</p>
+            <div class="mt-0.5 flex items-center gap-1">
+              <p class="truncate text-[11px] text-slate-600 flex-1" title="${promptTitle}">${promptDisplay}</p>
+              <button onclick="copyEncodedPrompt(this)" data-prompt="${encodeURIComponent(prompt)}" class="flex-shrink-0 rounded border border-slate-300 px-1.5 py-0.5 text-[10px] text-slate-500 hover:bg-slate-100" title="复制提示词">复制</button>
+            </div>
           </div>
         </div>`;
       }).join("");
     }
 
     async function clearHistory() {
-      if (!confirm("???????????")) return;
-      await fetch("/api/history/clear", { method: "POST" });
+      const date = document.getElementById("historyDateFilter").value;
+      const msg = date ? `确认清空 ${date} 的历史记录？` : "确认清空所有历史记录？";
+      if (!confirm(msg)) return;
+      const url = date ? "/api/history/clear?date=" + encodeURIComponent(date) : "/api/history/clear";
+      await fetch(url, { method: "POST" });
       renderHistory([]);
+      loadHistoryDates();
     }
 
     // --- Cancel ---
     async function cancelProduction() {
       const cancelBtn = document.getElementById("cancelBtn");
-      cancelBtn.innerText = "????????...";
+      cancelBtn.innerText = "取消中...";
       cancelBtn.disabled = true;
       try {
         await fetch("/api/cancel", { method: "POST" });
       } catch (e) {
-        console.error("??????", e);
+        console.error("取消失败", e);
       }
     }
 
@@ -277,8 +326,8 @@
       btn.disabled = true;
       cancelBtn.classList.remove("hidden");
       cancelBtn.disabled = false;
-      cancelBtn.innerText = "????????";
-      btn.innerHTML = `<span class="flex items-center justify-center"><svg class="loading-spin h-5 w-5 mr-2" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> ?????...</span>`;
+      cancelBtn.innerText = "取消当前任务";
+      btn.innerHTML = `<span class="flex items-center justify-center"><svg class="loading-spin h-5 w-5 mr-2" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> 生成中...</span>`;
 
       const payload = {
         api_key: document.getElementById("apiKey").value,
@@ -301,8 +350,8 @@
 
       try {
         resultSection.classList.remove("hidden");
-        document.getElementById("batchTag").innerText = "?? -";
-        statusNotice.innerText = "????...";
+        document.getElementById("batchTag").innerText = "批次 -";
+        statusNotice.innerText = "正在生成...";
         document.getElementById("imageGallery").innerHTML = "";
         document.getElementById("videoList").innerHTML = "";
         document.getElementById("warnBox").classList.add("hidden");
@@ -348,39 +397,41 @@
             try { data = JSON.parse(dataStr); } catch (e) { continue; }
 
             if (eventType === "status") {
-              document.getElementById("batchTag").innerText = "?? " + (data.batch_id || "");
+              document.getElementById("batchTag").innerText = "批次 " + (data.batch_id || "");
               statusNotice.innerText = data.message || "";
             } else if (eventType === "image") {
               appendImageCard(data.url, data.label);
-              statusNotice.innerText = `??? ${data.done}/${data.total}`;
+              statusNotice.innerText = `已生成 ${data.done}/${data.total}`;
             } else if (eventType === "video") {
-              appendVideoCard(data.label || "????", "bg-sky-100 text-sky-800", data.url, "??????");
+              appendVideoCard(data.label || "视频", "bg-sky-100 text-sky-800", data.url, "下载视频");
             } else if (eventType === "popup_video") {
-              appendVideoCard(data.label || "????", "bg-violet-100 text-violet-800", data.url, "????");
+              appendVideoCard(data.label || "弹屏", "bg-violet-100 text-violet-800", data.url, "下载弹屏");
             } else if (eventType === "error") {
-              console.error("????:", data.message);
+              console.error("服务端错误:", data.message);
             } else if (eventType === "done") {
-              document.getElementById("batchTag").innerText = "?? " + (data.batch_id || "");
-              statusNotice.innerText = (data.status === "failed" ? "??????" : "") + (data.message || "");
+              document.getElementById("batchTag").innerText = "批次 " + (data.batch_id || "");
+              statusNotice.innerText = (data.status === "failed" ? "生成失败 " : "") + (data.message || "");
               if (data.warnings && data.warnings.length) {
                 document.getElementById("warnBox").innerText = data.warnings.join("\n");
                 document.getElementById("warnBox").classList.remove("hidden");
               }
               // Refresh history
               loadHistory();
+              loadHistoryDates();
             }
           }
         }
       } catch (error) {
-        alert("????: " + error.message);
+        alert("请求失败: " + error.message);
       } finally {
         btn.disabled = false;
-        btn.innerText = "???????";
+        btn.innerText = "开始全自动生产";
         cancelBtn.classList.add("hidden");
       }
     }
 
-    // Load history on page start
+    // Load history and dates on page start
+    loadHistoryDates();
     loadHistory();
   </script>
 </body>

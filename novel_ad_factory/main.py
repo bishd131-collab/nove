@@ -95,19 +95,36 @@ def save_to_history(prompt: str, image_url: str, batch_id: int, img_type: str):
             "type": img_type,
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         })
-        # Keep last 200 entries
-        if len(entries) > 200:
-            entries = entries[-200:]
+        # Keep last 300 entries
+        if len(entries) > 300:
+            entries = entries[-300:]
         HISTORY_FILE.write_text(json.dumps(entries, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def load_history() -> list:
+def load_history(date: str = None) -> list:
+    entries = []
     if HISTORY_FILE.exists():
         try:
-            return json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
+            entries = json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
         except Exception:
             return []
-    return []
+    if date:
+        entries = [e for e in entries if e.get("timestamp", "").startswith(date)]
+    return entries
+
+
+def get_history_dates() -> list:
+    dates = set()
+    if HISTORY_FILE.exists():
+        try:
+            entries = json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            return []
+        for e in entries:
+            ts = e.get("timestamp", "")
+            if ts:
+                dates.add(ts[:10])
+    return sorted(dates, reverse=True)
 
 
 def save_task_record(batch_dir: Path, batch_id: int, body: "GenerateRequest",
@@ -1177,9 +1194,9 @@ def run_full_generation_stream(body: GenerateRequest, queue: "asyncio.Queue", ma
                 finally:
                     clip.close()
                 video_url = f"/static/output/{batch_id}/{v_name}"
-                emit_event("video", {"url": video_url, "label": "??????", "batch_id": batch_id})
+                emit_event("video", {"url": video_url, "label": "滚屏视频", "batch_id": batch_id})
         except Exception as e:
-            warnings.append(f"?????????{e}")
+            warnings.append(f"视频生成失败: {e}")
 
     # Popup video generation
     popup_urls: List[str] = []
@@ -1195,24 +1212,24 @@ def run_full_generation_stream(body: GenerateRequest, queue: "asyncio.Queue", ma
                 if tag:
                     u = f"/static/output/{batch_id}/{out.name}"
                     popup_urls.append(u)
-                    emit_event("popup_video", {"url": u, "label": f"?? {i + 1}", "batch_id": batch_id})
+                    emit_event("popup_video", {"url": u, "label": f"弹屏 {i + 1}", "batch_id": batch_id})
             except Exception as e:
-                errors.append(f"????{i + 1}?{e}")
+                errors.append(f"弹屏{i + 1}失败: {e}")
 
     # Final status
     if IS_CANCELLING:
-        status, message = "cancelled", "???????????"
+        status, message = "cancelled", "任务已取消"
     else:
         expected = total_square + scroll_visual_total
         got_png = image_seq
         if expected == 0 and body.popup_count == 0:
-            status, message = "success", "?????????"
+            status, message = "success", "无需生成任何素材"
         elif got_png == 0 and expected > 0:
-            status, message = "failed", "???????"
+            status, message = "failed", "所有素材生成失败"
         elif got_png < expected:
-            status, message = "partial", f"???? {got_png}/{expected}?"
+            status, message = "partial", f"部分完成 {got_png}/{expected} 张"
         else:
-            status, message = "success", "?????"
+            status, message = "success", "生成成功"
 
     dl_names = [Path(u).name for u in generated_images if u.endswith(".png")]
     if video_url:
@@ -1270,15 +1287,26 @@ async def api_generate_stream(body: GenerateRequest):
 
 
 @app.get("/api/history")
-def api_history():
-    return load_history()
+def api_history(date: str = ""):
+    return load_history(date or None)
+
+
+@app.get("/api/history/dates")
+def api_history_dates():
+    return get_history_dates()
 
 
 @app.post("/api/history/clear")
-def api_history_clear():
-    if HISTORY_FILE.exists():
-        HISTORY_FILE.unlink()
-    return {"status": "cleared"}
+def api_history_clear(date: str = ""):
+    if not date:
+        if HISTORY_FILE.exists():
+            HISTORY_FILE.unlink()
+        return {"status": "cleared"}
+    # Clear only entries for a specific date
+    entries = load_history()
+    entries = [e for e in entries if not e.get("timestamp", "").startswith(date)]
+    HISTORY_FILE.write_text(json.dumps(entries, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {"status": "cleared", "date": date}
 
 
 @app.post("/api/generate")
