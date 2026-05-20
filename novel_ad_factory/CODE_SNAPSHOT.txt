@@ -1,0 +1,488 @@
+================================================================================
+FILE: main.py  （保存到项目根目录，与 static 文件夹同级）
+================================================================================
+import os
+import json
+import uuid
+import requests
+import numpy as np
+from pathlib import Path
+from typing import List
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+from PIL import Image, ImageDraw, ImageFont
+try:
+    from moviepy.editor import ImageSequenceClip
+except ImportError:
+    from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
+
+app = FastAPI()
+
+# 允许跨域
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# --- 数据模型：接收来自网页的所有参数 ---
+class GenerateRequest(BaseModel):
+    api_key: str
+    api_url: str
+    chat_model_name: str   # /chat/completions，生成出图提示词任务清单
+    image_model_name: str  # /images/generations，文生图
+    novel_content: str  # 小说原文
+    prompt: str         # 绘图提示词
+    video_text: str     # 专门用于视频滚动的文案
+    single_count: int
+    lr_split_count: int
+    tb_split_count: int
+    scroll_count: int
+
+
+def request_image_prompt_plan(
+    api_url: str,
+    api_key: str,
+    chat_model_name: str,
+    novel_content: str,
+    user_prompt: str,
+    n_square: int,
+    n_scroll: int,
+) -> tuple[List[str], List[str]]:
+    """调用 chat/completions，根据小说与用户提示生成方图、滚屏图两套提示词清单。"""
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    url = api_url.rstrip("/") + "/chat/completions"
+    system = (
+        "你是资深 AI 绘画提示词策划。根据小说节选与用户总体画风/主题提示，产出用于文生图的任务清单。\n"
+        "只输出严格 JSON，不要使用 markdown 代码围栏，不要输出任何 JSON 以外的文字。\n"
+        '格式：{"square_prompts":["..."],"scroll_prompts":["..."]}\n'
+        f"- square_prompts：字符串数组，恰好 {n_square} 条，每条对应一张 1:1 方图"
+        "（可用于单图、左右分屏、上下分屏等素材；条与条之间应在构图或内容上有所区分）。\n"
+        f"- scroll_prompts：字符串数组，恰好 {n_scroll} 条，每条对应一张竖屏 9:16 滚屏背景图；"
+        "每条提示必须明确包含「9:16」或「竖屏」等与纵向竖构图相关的描述，适合上下滚动阅读的连续背景感。\n"
+        "提示词可采用中英混合以便绘图模型理解。"
+    )
+    user = (
+        f"用户总体绘图提示：\n{user_prompt}\n\n小说节选：\n{novel_content}\n\n"
+        f"请生成 square_prompts {n_square} 条、scroll_prompts {n_scroll} 条。"
+    )
+    payload = {
+        "model": chat_model_name,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        "temperature": 0.7,
+    }
+    r = requests.post(url, json=payload, headers=headers, timeout=120)
+    r.raise_for_status()
+    raw = r.json()["choices"][0]["message"]["content"].strip()
+    if raw.startswith("```"):
+        raw = raw.split("\n", 1)[-1]
+        if "```" in raw:
+            raw = raw.rsplit("```", 1)[0].strip()
+    data = json.loads(raw)
+    square = data.get("square_prompts") or []
+    scroll = data.get("scroll_prompts") or []
+    if not isinstance(square, list):
+        square = []
+    if not isinstance(scroll, list):
+        scroll = []
+    return [str(x).strip() for x in square], [str(x).strip() for x in scroll]
+
+
+def pad_prompts(prompts: List[str], n: int, filler: str) -> List[str]:
+    out = [p for p in prompts if p][:n]
+    while len(out) < n:
+        out.append(filler)
+    return out
+
+
+# --- 工具函数：搬运自你的老代码 (精准排版逻辑) ---
+
+def draw_text_with_spacing(draw, text, position, font, fill, char_spacing):
+    x, y = position
+    for char in text:
+        draw.text((x, y), char, font=font, fill=fill)
+        char_w = draw.textlength(char, font=font)
+        x += char_w + char_spacing
+
+def wrap_text_precisely(draw_obj, text, font, max_width, char_spacing):
+    paragraphs = text.split('\n')
+    lines = []
+    for p in paragraphs:
+        if p.strip() == "" and p == "":
+            lines.append("")
+            continue
+        words = p.split(' ')
+        current_line = ""
+        for word in words:
+            test_line = word if current_line == "" else current_line + ' ' + word
+            w = draw_obj.textlength(test_line, font=font) + char_spacing * max(0, len(test_line)-1)
+            if w <= max_width:
+                current_line = test_line
+            else:
+                if current_line: lines.append(current_line)
+                current_line = word
+        if current_line: lines.append(current_line)
+    return lines
+
+def pre_render_text(text, target_width, font_path, font_size, text_color, line_spacing, char_spacing, align="居中对齐"):
+    try:
+        font = ImageFont.truetype(font_path, font_size)
+    except:
+        font = ImageFont.load_default()
+    test_draw = ImageDraw.Draw(Image.new('RGB', (1, 1)))
+    wrapped_lines = wrap_text_precisely(test_draw, text, font, target_width, char_spacing)
+    line_h = font_size + line_spacing
+    img_h = len(wrapped_lines) * line_h + 100
+    text_canvas = Image.new('RGBA', (target_width, img_h), (0,0,0,0))
+    draw = ImageDraw.Draw(text_canvas)
+    current_y = 0
+    for line in wrapped_lines:
+        if line == "":
+            current_y += line_h
+            continue
+        line_width = draw.textlength(line, font=font) + (char_spacing * max(0, len(line)-1))
+        x = (target_width - line_width) // 2 if align == "居中对齐" else 0
+        draw_text_with_spacing(draw, line, (x, current_y), font, text_color, char_spacing)
+        current_y += line_h
+    return text_canvas
+
+# --- 核心接口 ---
+
+@app.post("/api/generate")
+def generate(body: GenerateRequest):
+    output_dir = Path(__file__).parent / "static" / "output"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    generated_images = []
+    video_source_images = []  # 存储 9:16 的图片路径
+
+    headers = {"Authorization": f"Bearer {body.api_key}", "Content-Type": "application/json"}
+    base_url = body.api_url.rstrip('/') + "/images/generations"
+
+    total_square = body.single_count + body.lr_split_count + body.tb_split_count
+    square_prompts: List[str] = []
+    scroll_prompts: List[str] = []
+
+    if total_square > 0 or body.scroll_count > 0:
+        try:
+            square_prompts, scroll_prompts = request_image_prompt_plan(
+                body.api_url,
+                body.api_key,
+                body.chat_model_name,
+                body.novel_content,
+                body.prompt,
+                total_square,
+                body.scroll_count,
+            )
+        except Exception as e:
+            print(f"任务清单（chat/completions）生成失败，将使用默认提示词: {e}")
+            square_prompts, scroll_prompts = [], []
+
+    scroll_filler = (
+        f"{body.prompt}，9:16 竖屏构图，纵向 portrait，适合视频滚动的背景"
+    )
+    square_prompts = pad_prompts(square_prompts, total_square, body.prompt)
+    scroll_prompts = pad_prompts(scroll_prompts, body.scroll_count, scroll_filler)
+
+    def fetch_image(prompt, size):
+        payload = {"model": body.image_model_name, "prompt": prompt, "size": size, "n": 1}
+        try:
+            r = requests.post(base_url, json=payload, headers=headers, timeout=60)
+            img_url = r.json()['data'][0]['url']
+            img_data = requests.get(img_url).content
+            fname = f"{uuid.uuid4().hex[:8]}.png"
+            fpath = output_dir / fname
+            with open(fpath, 'wb') as f:
+                f.write(img_data)
+            return fname
+        except Exception as e:
+            print(f"出图失败: {e}")
+            return None
+
+    # 1. 生成 1:1 的图 (单图 + 左右分屏 + 上下分屏)，使用任务清单中的提示词
+    for i in range(total_square):
+        print(f"正在生成第 {i+1} 张 1:1 图片...")
+        name = fetch_image(square_prompts[i], "1024x1024")
+        if name:
+            generated_images.append(f"/static/output/{name}")
+
+    # 2. 生成 9:16 的图 (滚屏视频用)，尺寸与提示词均约束为竖屏
+    for i in range(body.scroll_count):
+        print(f"正在生成第 {i+1} 张 9:16 视频背景图...")
+        p = scroll_prompts[i]
+        if "9:16" not in p and "9：16" not in p and "竖屏" not in p:
+            p = f"{p}，9:16 竖屏纵向构图"
+        name = fetch_image(p, "768x1344")
+        if name:
+            generated_images.append(f"/static/output/{name}")
+            video_source_images.append(str(output_dir / name))
+
+    # 3. 融合视频生成逻辑 (MoviePy)
+    video_url = ""
+    if video_source_images and body.video_text:
+        print("图片就绪，开始合成滚屏视频...")
+        try:
+            fps = 30
+            n_shrink = 1.23
+            f_size = 46
+            l_spacing = 7
+            wpm = 360
+            t_color = "#FFFFFF"
+            bg_color = (0, 0, 0, 150)
+
+            base_img = Image.open(video_source_images[0]).convert("RGB")
+            W, H = base_img.size
+
+            ov_w, ov_h = int(W / n_shrink), int(H / n_shrink)
+            ov_x, ov_y = (W - ov_w) // 2, (H - ov_h) // 2
+
+            text_canvas = pre_render_text(
+                body.video_text, ov_w - 40, "font.ttf",
+                f_size, t_color, l_spacing, 0, "居中对齐"
+            )
+            text_h = text_canvas.size[1]
+
+            overlay_pic = Image.new('RGBA', (ov_w, ov_h), bg_color)
+            base_frame_with_box = base_img.copy().convert("RGBA")
+            base_frame_with_box.paste(overlay_pic, (ov_x, ov_y), overlay_pic)
+
+            y_start = int(ov_h / 2)
+            y_end = ov_h - text_h - 30
+            valid_words = len([w for w in body.video_text.split() if w.strip()])
+            duration = max(3.0, (valid_words / wpm) * 60)
+
+            frames = []
+            scroll_frames = int(duration * fps)
+            y_offsets = np.linspace(y_start, y_end, scroll_frames)
+
+            def make_frame(y_off):
+                box_content = Image.new('RGBA', (ov_w, ov_h), (0, 0, 0, 0))
+                box_content.paste(text_canvas, (20, int(y_off)), text_canvas)
+                final_f = base_frame_with_box.copy()
+                final_f.paste(box_content, (ov_x, ov_y), box_content)
+                return np.array(final_f.convert("RGB"))
+
+            start_img = make_frame(y_start)
+            for _ in range(fps * 2):
+                frames.append(start_img)
+            for y in y_offsets:
+                frames.append(make_frame(y))
+            end_img = make_frame(y_end)
+            for _ in range(fps * 3):
+                frames.append(end_img)
+
+            v_name = f"video_{uuid.uuid4().hex[:8]}.mp4"
+            v_path = output_dir / v_name
+            clip = ImageSequenceClip(frames, fps=fps)
+            clip.write_videofile(str(v_path), fps=fps, codec="libx264", audio=False)
+            video_url = f"/static/output/{v_name}"
+
+        except Exception as ve:
+            print(f"视频生成失败: {ve}")
+
+    return {
+        "status": "success",
+        "images": generated_images,
+        "video": video_url,
+        "message": "任务圆满完成"
+    }
+
+
+# 自动获取当前 main.py 所在的绝对路径
+base_path = Path(__file__).parent.resolve()
+static_path = base_path / "static"
+
+if not static_path.exists():
+    static_path.mkdir()
+    print(f"警告：自动创建了缺失的 static 文件夹，请把 index.html 放进去！")
+
+app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
+
+
+@app.get("/")
+def read_root():
+    from fastapi.responses import FileResponse
+    index_file = static_path / "index.html"
+    if index_file.exists():
+        return FileResponse(index_file)
+    return {"error": "未在 static 文件夹下找到 index.html"}
+
+================================================================================
+FILE: static/index.html  （保存到 static 文件夹内）
+================================================================================
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI 小说广告素材工厂</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-slate-50 p-8">
+  <div class="mx-auto max-w-4xl space-y-6">
+    <h1 class="text-3xl font-bold text-slate-800 text-center">🎬 小说素材全自动工厂</h1>
+
+    <div class="grid gap-6 md:grid-cols-2">
+      <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-4">
+        <h2 class="text-sm font-semibold text-slate-600 border-b pb-2">接口配置</h2>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-slate-700">API 密钥</label>
+          <input id="apiKey" type="password" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 shadow-sm focus:ring-1 focus:ring-indigo-500" placeholder="sk-..." />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-slate-700">API 地址</label>
+          <input id="apiUrl" type="url" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 shadow-sm focus:ring-1 focus:ring-indigo-500" value="https://api.geeknow.top/v1" />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-slate-700">对话模型（任务清单 /chat）</label>
+          <input id="chatModelName" type="text" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 shadow-sm focus:ring-1 focus:ring-indigo-500" placeholder="如 gpt-4o-mini" />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-slate-700">出图模型（文生图）</label>
+          <input id="imageModelName" type="text" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 shadow-sm focus:ring-1 focus:ring-indigo-500" value="black-forest-labs/FLUX.1-schnell" />
+        </div>
+      </div>
+
+      <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-4">
+        <h2 class="text-sm font-semibold text-slate-600 border-b pb-2">生成数量</h2>
+        <div class="grid gap-4 grid-cols-2">
+          <div class="space-y-1">
+            <label class="block text-xs font-medium text-slate-500">单图 (1:1)</label>
+            <input id="singleImageCount" type="number" min="0" value="1" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-center" />
+          </div>
+          <div class="space-y-1">
+            <label class="block text-xs font-medium text-slate-500">滚屏图 (9:16)</label>
+            <input id="scrollSingleCount" type="number" min="0" value="1" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-center" />
+          </div>
+          <div class="space-y-1">
+            <label class="block text-xs font-medium text-slate-500">左右分屏 (1:1)</label>
+            <input id="lrSplitCount" type="number" min="0" value="0" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-center" />
+          </div>
+          <div class="space-y-1">
+            <label class="block text-xs font-medium text-slate-500">上下分屏 (1:1)</label>
+            <input id="tbSplitCount" type="number" min="0" value="0" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-center" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="space-y-4">
+      <div>
+        <label class="mb-1 block text-sm font-medium text-slate-700">小说内容 (用于提取情节)</label>
+        <textarea id="novelContent" rows="4" class="w-full rounded-lg border border-slate-300 p-3 shadow-sm focus:ring-1 focus:ring-indigo-500" placeholder="在此粘贴小说内容..."></textarea>
+      </div>
+
+      <div>
+        <label class="mb-1 block text-sm font-medium text-slate-700">视频滚动文案 (小说第一章)</label>
+        <textarea id="videoText" rows="4" class="w-full rounded-lg border border-slate-300 p-3 shadow-sm focus:ring-1 focus:ring-indigo-500" placeholder="填写则用于滚屏视频压字..."></textarea>
+      </div>
+
+      <div>
+        <label class="mb-1 block text-sm font-medium text-slate-700">绘图提示词 (Prompt)</label>
+        <textarea id="prompt" rows="4" class="w-full rounded-lg border border-slate-300 p-3 shadow-sm focus:ring-1 focus:ring-indigo-500" placeholder="输入核心提示词关键词串..."></textarea>
+      </div>
+    </div>
+   
+    <button id="btnStart" type="button" class="w-full rounded-lg bg-indigo-600 py-4 text-white font-bold text-lg hover:bg-indigo-700 transition shadow-lg">
+      🚀 开始全自动生产
+    </button>
+
+    <div id="resultSection" class="hidden space-y-6 pt-6 border-t">
+        <h2 class="text-xl font-bold text-slate-800">📊 生产成果</h2>
+        
+        <div id="videoContainer" class="hidden">
+            <h3 class="text-md font-semibold text-indigo-600 mb-2">🎬 滚屏视频：</h3>
+            <video id="videoPlayer" controls class="max-w-sm rounded-lg border shadow-md"></video>
+        </div>
+
+        <div id="imageGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+            </div>
+    </div>
+  </div>
+
+  <script>
+    const btn = document.getElementById("btnStart");
+
+    btn.addEventListener("click", async () => {
+      // 这里的变量名必须和 main.py 里的 GenerateRequest 完全一致！
+      const payload = {
+        api_key: document.getElementById("apiKey").value,
+        api_url: document.getElementById("apiUrl").value,
+        chat_model_name: document.getElementById("chatModelName").value.trim(),
+        image_model_name: document.getElementById("imageModelName").value.trim(),
+        novel_content: document.getElementById("novelContent").value,
+        video_text: document.getElementById("videoText").value,
+        prompt: document.getElementById("prompt").value,
+        single_count: parseInt(document.getElementById("singleImageCount").value) || 0,
+        lr_split_count: parseInt(document.getElementById("lrSplitCount").value) || 0,
+        tb_split_count: parseInt(document.getElementById("tbSplitCount").value) || 0,
+        scroll_count: parseInt(document.getElementById("scrollSingleCount").value) || 0,
+      };
+
+      if (!payload.api_key || !payload.prompt) {
+        return alert("请填写 API 密钥和提示词！");
+      }
+      if (!payload.chat_model_name || !payload.image_model_name) {
+        return alert("请填写对话模型与出图模型！");
+      }
+
+      btn.disabled = true;
+      btn.innerText = "⏳ 生产中，请不要关闭页面...";
+      btn.className = "w-full rounded-lg bg-slate-400 py-4 text-white font-bold text-lg cursor-not-allowed";
+
+      try {
+        const res = await fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) throw new Error("服务器响应失败: " + res.status);
+
+        const data = await res.json();
+        
+        // 显示结果区域
+        document.getElementById("resultSection").classList.remove("hidden");
+
+        // 处理图片展示
+        const grid = document.getElementById("imageGrid");
+        grid.innerHTML = ""; 
+        if (data.images && data.images.length > 0) {
+            data.images.forEach(src => {
+                const img = document.createElement("img");
+                img.src = src;
+                img.className = "rounded-lg border shadow-sm hover:scale-105 transition-transform duration-200";
+                grid.appendChild(img);
+            });
+        }
+
+        // 处理视频展示
+        const vContainer = document.getElementById("videoContainer");
+        const player = document.getElementById("videoPlayer");
+        if (data.video) {
+            vContainer.classList.remove("hidden");
+            player.src = data.video;
+        } else {
+            vContainer.classList.add("hidden");
+        }
+
+        alert("生成任务完成！");
+
+      } catch (e) {
+        alert("错误: " + e.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerText = "🚀 开始全自动生产";
+        btn.className = "w-full rounded-lg bg-indigo-600 py-4 text-white font-bold text-lg hover:bg-indigo-700 transition shadow-lg";
+      }
+    });
+  </script>
+</body>
+</html>

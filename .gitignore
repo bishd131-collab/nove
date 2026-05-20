@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+*.pyo
+**/static/output/
+**/batch_*/
+.claude/
+.env
+*.egg-info/

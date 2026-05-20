@@ -1,0 +1,91 @@
+================================================================================
+欧美小说投流素材 · 提示词母版（修订版）
+目标：与你当前网页 + /chat 任务清单 + /images 出图链路对齐；控制长度，减少网关报错。
+================================================================================
+
+【重要：和你程序的关系】
+1) 后端「对话模型」只会要一段严格 JSON，形如：
+   {"square_prompts":["英文逗号分隔tags", "..."],"scroll_prompts":["...", "..."]}
+   框外不要写中文说明、不要 markdown、不要代码围栏。
+2) 「绘图提示词」文本框 = 全局画风/合规/负面/逻辑锁；后端默认允许更长（默认上限约 12000 字符，可在网页调高）。网关仍报错再降低或压缩。
+3) 「小说内容」= 剧情与分镜指令（可较长）；冲突、钩子、场景类型要求写在这里，让对话模型拆成多条英文 tags。
+4) 分屏若只做「一张图里画左右/上下分屏」，仍按 Tag 描述 split-screen；若网关不支持叠字，删掉 text:"..." 相关 Tag。
+
+================================================================================
+一、粘贴到网页「小说内容」（给对话模型读，可用中文写要求）
+================================================================================
+【人设】提取男女主与关键配角：年龄、外貌、服装层级、身份；女主≤30岁白人，男主与配角用「XX-year-old Caucasian man/woman」；全文禁止真实姓名，只用年龄+白人标签。
+
+【输出契约】你必须只输出 JSON：
+{"square_prompts":[...共 N 条...],"scroll_prompts":[...共 M 条...]}
+N、M 与页面填写数量一致。每条字符串：仅英文，逗号分隔短 Tag，禁止完整英文长句，禁止中文。
+
+【单图 square_prompts 每条必须包含】
+- 模块顺序建议：画质镜头 → 冲突动作短语前置 → 视觉钩子道具 → 环境光影 → 逻辑锁 → 叙事张力 → 负面（可与全局合并去重，避免超长）
+- 单图严禁 text overlay：不要 text:, subtitle, caption 类 Tag。
+- 强钩子参与动作：枪、验孕棒、戒指、撕毁文件、下跪、拖拽等之一，必须卷入动作而非背景摆设。
+- 至少若干条允许「炸裂衍生」：保留人设与世界观，情节可比原文更狠（当众曝光、拖走社死、下跪求复合、权力反转等选一）。
+- 禁止低 CTR：避免单人站桩弱情绪；要冲突瞬间。
+- Facebook 合规：避免出现投放违禁语义（欺诈、仇恨、成人明示等）；不涉及真实名人。
+
+【滚屏竖屏 scroll_prompts 每条必须包含】
+- 明确 vertical 9:16 portrait、tall cinematic framing；钩子+冲突与前述一致。
+- 若模型不支持画中叠字，删除任何 text 叠加 Tag。
+
+【分屏若在本批次中】（当页面「左右/上下分屏」数量>0 时，对应条目的 square 提示必须写明）
+- 左右：split-screen left and right, hard clear split boundaries, extreme visual contrast；左右人物状态相反；如需字幕式英文，仅用 text:"..." 三段规范（左/右/底），并声明 high-contrast subtitle style。
+- 上下：split-screen top and bottom, hard clear horizontal split boundaries；中间分割线 text:"..." 一条叙事核心。
+- 分屏条目建议锚定原文反差（若用户要求分屏贴合原文）。
+
+【固定场景库覆盖】若用户要求 7 类单图各一张，则在 square_prompts 中分别覆盖以下类型（顺序可调）：
+1 亲密名场面 2 崩溃与背叛 3 亲子护宝 4 追妻火葬场 5 大女主高光 6 婚礼复仇 7 命悬一线
+（实际条数以页面数量为准；不足则优先保证冲突最强的类型。）
+
+================================================================================
+二、粘贴到网页「绘图提示词」（全局短底稿 · 英文 · 请按需再缩短）
+================================================================================
+（下面整块粘贴；若仍「消息过长」，优先删重复负面词，保留前 8～12 条负面即可）
+
+masterpiece, best quality, ultra-detailed, cinematic photorealistic, freeze action, dramatic lighting,
+Facebook ads safe, no explicit sexual content, no minors, no real celebrity names,
+28-year-old to 35-year-old Caucasian adults only, explicit ages in tags as required, no vague "young",
+no Chinese characters in scene, comma-separated tags only,
+strong narrative moment, clear conflict focal point, readable silhouette, single frozen climax frame,
+extreme action verbs preferred over standing talking holding,
+devastating realization, cold ruthless detachment, explosive rage, panic collapse, desperate pleading,
+visual hook prop integrated into action: gun, pregnancy test, wedding ring, torn documents, kneeling, dragging,
+high-contrast lighting, deep blacks, brilliant whites, sharp accent colors, heavy rain optional,
+strict spatial hierarchy, fixed camera perspective, anatomically correct, correct limb count, no object clipping,
+gaze firmly fixed on story target, never look at camera, no eye contact with viewer,
+no text, no words, no letters, no numbers, no writing, no subtitles, no watermarks, no logos, no signs, no street names,
+no distorted limbs, no fused fingers, no extra limbs, no anatomical errors
+
+说明：
+- 若某张图需要叠字（分屏），在该条 JSON 字符串里另加 text:"..." 相关 Tag；无叠字单图不要加 text。
+- 你的原文里的 SD 权重写法如 (strictly follow prompt 100%:1.5) 多数「文生图 OpenAI/Flux 网关」不支持，已改为纯英文逻辑锁描述；若你本地 SD 再用权重语法即可。
+
+================================================================================
+三、对话模型「系统侧」可替换的极简版（若你改 main.py 里 system 提示，可用此逻辑）
+================================================================================
+你是欧美小说 Facebook 投流素材出图策划。用户会给你「小说/分镜要求」+「全局英文 tag 底稿」。
+你只输出 JSON：{"square_prompts":[],"scroll_prompts":[]}，数组长度分别等于用户指定的 N、M。
+每条：英文逗号分隔短 Tag；冲突与钩子前置；合并重复负面；控制每条建议 ≤800～1200 英文字符以免网关拒绝。
+单图无 overlay；分屏再加分屏与 text 规则。不要输出中文、不要 markdown。
+
+================================================================================
+四、操作清单（避免再失败）
+================================================================================
+1) 「绘图提示词」只贴第二节短底稿 ± 你自己的 5～10 条独家负面，不要把整份母版 long doc 贴进出图框。
+2) 长篇规则、7 场景、炸裂衍生比例 → 写进「小说内容」。
+3) 对话模型常 500：页面取消「过长压缩」(如有)；换稳定 chat 模型；任务清单失败仍会用语义较弱的默认 prompt，更依赖你把第二节写全。
+4) 仍报「消息过长」：把第二节负面砍半；网页「出图提示词上限」逐步下调试验（程序默认已调高，以网关实际为准）。
+
+================================================================================
+五、原文与修订差异摘要
+================================================================================
+- 去掉重复模块堆砌；负面词只保留一份在第二节。
+- 明确 JSON 输出契约，避免「第一类第二类标题+代码框」与程序解析冲突。
+- 弱化为通用网关兼容：权重语法改为英文指令；分屏 text 标注为可选。
+- 角色年龄：保持「具体岁数 + Caucasian」策略，禁止姓名。
+
+（完）
