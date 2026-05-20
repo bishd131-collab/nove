@@ -23,15 +23,15 @@
           <h2 class="text-sm font-bold text-indigo-600 uppercase tracking-wider border-b pb-2">接口配置</h2>
           <div>
             <label class="mb-1 block text-xs font-medium text-slate-700">API 密钥</label>
-            <input id="apiKey" type="password" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none" placeholder="sk-..." />
+            <input id="apiKey" type="password" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none" placeholder="sk-..." oninput="saveApiConfig()" />
           </div>
           <div>
             <label class="mb-1 block text-xs font-medium text-slate-700">API 地址</label>
-            <input id="apiUrl" type="text" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none" value="https://api.geeknow.top/v1" />
+            <input id="apiUrl" type="text" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none" value="https://api.geeknow.top/v1" oninput="saveApiConfig()" />
           </div>
           <div>
             <label class="mb-1 block text-xs font-medium text-slate-700">出图模型</label>
-            <input id="imageModel" type="text" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none" value="gpt-image-1" />
+            <input id="imageModel" type="text" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none" oninput="saveApiConfig()" />
           </div>
         </div>
 
@@ -88,6 +88,30 @@
   </div>
 
   <script>
+    const API_CONFIG_DEFAULTS = { apiKey: "", apiUrl: "https://api.geeknow.top/v1", imageModel: "gpt-image-1" };
+
+    function saveApiConfig() {
+      let cfg = {};
+      try { cfg = JSON.parse(localStorage.getItem("novel_api_config")) || {}; } catch (e) {}
+      ["apiKey", "apiUrl", "imageModel"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) cfg[id] = el.value;
+      });
+      localStorage.setItem("novel_api_config", JSON.stringify(cfg));
+    }
+
+    function loadApiConfig() {
+      try {
+        const saved = JSON.parse(localStorage.getItem("novel_api_config"));
+        if (saved) {
+          document.getElementById("apiKey").value = saved.apiKey || "";
+          document.getElementById("apiUrl").value = saved.apiUrl || API_CONFIG_DEFAULTS.apiUrl;
+          document.getElementById("imageModel").value = saved.imageModel || API_CONFIG_DEFAULTS.imageModel;
+        }
+      } catch (e) { /* ignore */ }
+    }
+    loadApiConfig();
+
     function absUrl(path) {
       if (!path) return "";
       if (path.startsWith("http")) return path;

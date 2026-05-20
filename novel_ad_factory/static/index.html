@@ -24,20 +24,20 @@
           <h2 class="text-sm font-bold text-indigo-600 uppercase tracking-wider border-b pb-2">1. 接口配置</h2>
           <div>
             <label class="mb-1 block text-xs font-medium text-slate-700">API 密钥</label>
-            <input id="apiKey" type="password" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="sk-..." />
+            <input id="apiKey" type="password" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="sk-..." oninput="saveApiConfig()" />
           </div>
           <div>
             <label class="mb-1 block text-xs font-medium text-slate-700">API 地址</label>
-            <input id="apiUrl" type="text" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" value="https://api.geeknow.top/v1" />
+            <input id="apiUrl" type="text" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" value="https://api.geeknow.top/v1" oninput="saveApiConfig()" />
           </div>
           <div class="grid grid-cols-2 gap-2">
             <div>
               <label class="mb-1 block text-xs font-medium text-slate-700">对话模型</label>
-              <input id="chatModel" type="text" class="w-full rounded-lg border border-slate-300 px-2 py-2 text-xs" value="gpt-4o-mini" />
+              <input id="chatModel" type="text" class="w-full rounded-lg border border-slate-300 px-2 py-2 text-xs" oninput="saveApiConfig()" />
             </div>
             <div>
               <label class="mb-1 block text-xs font-medium text-slate-700">出图模型</label>
-              <input id="imageModel" type="text" class="w-full rounded-lg border border-slate-300 px-2 py-2 text-xs" value="gpt-image-1" />
+              <input id="imageModel" type="text" class="w-full rounded-lg border border-slate-300 px-2 py-2 text-xs" oninput="saveApiConfig()" />
             </div>
           </div>
           <div>
@@ -154,6 +154,31 @@
 
   <script>
     let lastPayloadUrls = [];
+
+    const API_CONFIG_DEFAULTS = { apiKey: "", apiUrl: "https://api.geeknow.top/v1", chatModel: "gpt-4o-mini", imageModel: "gpt-image-1" };
+
+    function saveApiConfig() {
+      let cfg = {};
+      try { cfg = JSON.parse(localStorage.getItem("novel_api_config")) || {}; } catch (e) {}
+      ["apiKey", "apiUrl", "chatModel", "imageModel"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) cfg[id] = el.value;
+      });
+      localStorage.setItem("novel_api_config", JSON.stringify(cfg));
+    }
+
+    function loadApiConfig() {
+      try {
+        const saved = JSON.parse(localStorage.getItem("novel_api_config"));
+        if (saved) {
+          document.getElementById("apiKey").value = saved.apiKey || "";
+          document.getElementById("apiUrl").value = saved.apiUrl || API_CONFIG_DEFAULTS.apiUrl;
+          document.getElementById("chatModel").value = saved.chatModel || API_CONFIG_DEFAULTS.chatModel;
+          document.getElementById("imageModel").value = saved.imageModel || API_CONFIG_DEFAULTS.imageModel;
+        }
+      } catch (e) { /* ignore */ }
+    }
+    loadApiConfig();
 
     function absUrl(path) {
       if (!path) return "";
