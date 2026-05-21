@@ -101,7 +101,7 @@ def save_to_history(prompt: str, image_url: str, batch_id: int, img_type: str):
         HISTORY_FILE.write_text(json.dumps(entries, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def load_history(date: str = None) -> list:
+def load_history(date: str = None, img_type: str = None) -> list:
     entries = []
     if HISTORY_FILE.exists():
         try:
@@ -110,6 +110,8 @@ def load_history(date: str = None) -> list:
             return []
     if date:
         entries = [e for e in entries if e.get("timestamp", "").startswith(date)]
+    if img_type:
+        entries = [e for e in entries if e.get("type", "") == img_type]
     return entries
 
 
@@ -1379,8 +1381,8 @@ async def api_generate_stream(body: GenerateRequest):
 
 
 @app.get("/api/history")
-def api_history(date: str = ""):
-    return load_history(date or None)
+def api_history(date: str = "", type: str = ""):
+    return load_history(date or None, type or None)
 
 
 @app.get("/api/history/dates")

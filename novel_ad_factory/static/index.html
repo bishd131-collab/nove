@@ -3,160 +3,187 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AI 小说广告素材工厂 - 生产控制台</title>
+  <title>小说素材工厂</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     .loading-spin { animation: spin 1s linear infinite; }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .tab-btn.active { background-color: #1f2937; color: #f9fafb; border-left: 3px solid #818cf8; font-weight: 600; }
+    .tab-btn { border-left: 3px solid transparent; transition: all 0.15s; }
+    .tab-btn:hover { background-color: #1f2937; }
   </style>
 </head>
-<body class="min-h-screen bg-slate-50 p-4 md:p-8">
-  <div class="mx-auto max-w-6xl space-y-6">
-    <div class="text-center space-y-2">
-      <h1 class="text-3xl font-extrabold text-slate-800">小说素材全自动工厂</h1>
-      <p class="text-slate-500 text-sm">左右 / 上下分屏分开生成；支持<strong class="font-semibold text-slate-600">弹屏</strong>竖屏文案视频；提示词过长可压缩；素材可下载到本机</p>
-      <a href="/static/manual.html" class="inline-block rounded-lg border border-indigo-300 px-4 py-1.5 text-sm text-indigo-600 hover:bg-indigo-50">手动出图模式</a>
+<body class="min-h-screen bg-slate-100 flex">
+  <!-- ====== 左侧边栏（黑色主题） ====== -->
+  <aside class="w-56 min-h-screen bg-gray-900 border-r border-gray-700 flex flex-col shrink-0 text-gray-100">
+    <div class="p-4 border-b border-gray-700">
+      <h1 class="text-sm font-extrabold text-white">小说素材工厂</h1>
+      <p class="text-[10px] text-gray-400 mt-0.5">AI 广告素材生成</p>
     </div>
 
-    <div class="grid gap-6 lg:grid-cols-3">
-      <div class="lg:col-span-1 space-y-6">
-        <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
-          <h2 class="text-sm font-bold text-indigo-600 uppercase tracking-wider border-b pb-2">1. 接口配置</h2>
-          <div>
-            <label class="mb-1 block text-xs font-medium text-slate-700">API 密钥</label>
-            <input id="apiKey" type="password" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="sk-..." oninput="saveApiConfig()" />
-          </div>
-          <div>
-            <label class="mb-1 block text-xs font-medium text-slate-700">API 地址</label>
-            <input id="apiUrl" type="text" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" value="https://api.geeknow.top/v1" oninput="saveApiConfig()" />
-          </div>
-          <div class="grid grid-cols-2 gap-2">
-            <div>
-              <label class="mb-1 block text-xs font-medium text-slate-700">对话模型</label>
-              <input id="chatModel" type="text" class="w-full rounded-lg border border-slate-300 px-2 py-2 text-xs" oninput="saveApiConfig()" />
-            </div>
-            <div>
-              <label class="mb-1 block text-xs font-medium text-slate-700">出图模型</label>
-              <input id="imageModel" type="text" class="w-full rounded-lg border border-slate-300 px-2 py-2 text-xs" oninput="saveApiConfig()" />
-            </div>
-          </div>
-          <div>
-            <label class="mb-1 block text-xs font-medium text-slate-700">出图提示词上限</label>
-            <input id="maxImagePromptChars" type="number" min="0" max="100000" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value="12000" />
-          </div>
-          <label class="flex cursor-pointer items-start gap-2 text-sm text-slate-700">
-            <input id="compressPrompt" type="checkbox" class="mt-1 rounded border-slate-300" checked />
-            <span>提示词过长时用对话模型压缩后再出图</span>
-          </label>
-        </div>
+    <!-- 标签导航 -->
+    <nav class="flex flex-col py-2">
+      <button class="tab-btn active px-4 py-2.5 text-left text-xs text-gray-300" data-tab="auto" onclick="switchTab('auto')">
+        <span class="block font-semibold">全自动工厂</span>
+        <span class="block text-[10px] text-gray-500">小说内容驱动出图</span>
+      </button>
+      <button class="tab-btn px-4 py-2.5 text-left text-xs text-gray-300" data-tab="manual" onclick="switchTab('manual')">
+        <span class="block font-semibold">手动出图</span>
+        <span class="block text-[10px] text-gray-500">手动填写提示词</span>
+      </button>
+      <button class="tab-btn px-4 py-2.5 text-left text-xs text-gray-300" data-tab="history" onclick="switchTab('history')">
+        <span class="block font-semibold">历史记录</span>
+        <span class="block text-[10px] text-gray-500">浏览生成历史</span>
+      </button>
+    </nav>
 
-        <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
-          <h2 class="text-sm font-bold text-indigo-600 uppercase tracking-wider border-b pb-2">2. 生产数量</h2>
+    <!-- 接口配置 -->
+    <div class="p-3 border-t border-gray-700 mt-auto space-y-2.5">
+      <h3 class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">接口配置</h3>
+      <div>
+        <label class="mb-0.5 block text-[10px] text-gray-400">API 密钥</label>
+        <input id="apiKey" type="password" class="w-full rounded-md border border-gray-600 bg-gray-800 px-2 py-1.5 text-[11px] text-gray-100 outline-none focus:ring-1 focus:ring-indigo-400 placeholder-gray-500" placeholder="sk-..." oninput="saveApiConfig()" />
+      </div>
+      <div>
+        <label class="mb-0.5 block text-[10px] text-gray-400">API 地址</label>
+        <input id="apiUrl" type="text" class="w-full rounded-md border border-gray-600 bg-gray-800 px-2 py-1.5 text-[11px] text-gray-100 outline-none focus:ring-1 focus:ring-indigo-400" value="https://api.geeknow.top/v1" oninput="saveApiConfig()" />
+      </div>
+      <div>
+        <label class="mb-0.5 block text-[10px] text-gray-400">对话模型</label>
+        <input id="chatModel" type="text" class="w-full rounded-md border border-gray-600 bg-gray-800 px-2 py-1.5 text-[11px] text-gray-100 outline-none focus:ring-1 focus:ring-indigo-400" oninput="saveApiConfig()" />
+      </div>
+      <div>
+        <label class="mb-0.5 block text-[10px] text-gray-400">出图模型</label>
+        <input id="imageModel" type="text" class="w-full rounded-md border border-gray-600 bg-gray-800 px-2 py-1.5 text-[11px] text-gray-100 outline-none focus:ring-1 focus:ring-indigo-400" oninput="saveApiConfig()" />
+      </div>
+    </div>
+  </aside>
+
+  <!-- ====== 右侧内容区 ====== -->
+  <main class="flex-1 overflow-y-auto p-6 md:p-8">
+    <!-- ===== Tab 1: 全自动工厂 ===== -->
+    <div id="tab-auto" class="tab-panel space-y-5">
+      <div class="grid gap-4 lg:grid-cols-3">
+        <div class="lg:col-span-1 rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
+          <h2 class="text-sm font-bold text-indigo-600 uppercase tracking-wider border-b pb-2">生产数量</h2>
           <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="mb-1 block text-xs font-medium text-slate-700">带文本单图 (1:1)</label>
-              <input id="textSingleCount" type="number" min="0" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value="0" />
-            </div>
-            <div>
-              <label class="mb-1 block text-xs font-medium text-slate-700">滚屏单图 (9:16)</label>
-              <input id="scrollCount" type="number" min="0" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value="0" />
-            </div>
-            <div>
-              <label class="mb-1 block text-xs font-medium text-slate-700">左右分屏 (1:1)</label>
-              <input id="lrSplitCount" type="number" min="0" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value="0" />
-            </div>
-            <div>
-              <label class="mb-1 block text-xs font-medium text-slate-700">上下分屏 (1:1)</label>
-              <input id="tbSplitCount" type="number" min="0" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value="0" />
-            </div>
-            <div class="col-span-2 rounded-lg border border-violet-100 bg-violet-50/60 p-3">
-              <label class="mb-1 block text-xs font-semibold text-violet-800">弹屏视频（竖屏 9:16）</label>
-              <input id="popupCount" type="number" min="0" class="mt-1 w-full rounded-lg border border-violet-200 bg-white px-3 py-2 text-sm" value="0" />
-            </div>
-            <div class="col-span-2">
-              <label class="mb-1 block text-xs font-medium text-slate-700">并发数 <span class="text-slate-400">(越大越快，建议1-5)</span></label>
-              <input id="maxConcurrent" type="number" min="1" max="10" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value="3" />
-            </div>
+            <div><label class="mb-1 block text-xs font-medium text-slate-600">带文本单图 (1:1)</label><input id="textSingleCount" type="number" min="0" class="w-full rounded-md border border-slate-200 px-3 py-2 text-sm" value="0" /></div>
+            <div><label class="mb-1 block text-xs font-medium text-slate-600">滚屏单图 (9:16)</label><input id="scrollCount" type="number" min="0" class="w-full rounded-md border border-slate-200 px-3 py-2 text-sm" value="0" /></div>
+            <div><label class="mb-1 block text-xs font-medium text-slate-600">左右分屏 (1:1)</label><input id="lrSplitCount" type="number" min="0" class="w-full rounded-md border border-slate-200 px-3 py-2 text-sm" value="0" /></div>
+            <div><label class="mb-1 block text-xs font-medium text-slate-600">上下分屏 (1:1)</label><input id="tbSplitCount" type="number" min="0" class="w-full rounded-md border border-slate-200 px-3 py-2 text-sm" value="0" /></div>
+          </div>
+          <div class="rounded-md border border-violet-100 bg-violet-50/60 p-3">
+            <label class="mb-1 block text-xs font-semibold text-violet-800">弹屏视频（竖屏 9:16）</label><input id="popupCount" type="number" min="0" class="mt-0.5 w-full rounded-md border border-violet-200 bg-white px-3 py-2 text-sm" value="0" />
+          </div>
+          <div><label class="mb-1 block text-xs font-medium text-slate-600">并发数 <span class="text-slate-400">(越大越快，建议1-5)</span></label><input id="maxConcurrent" type="number" min="1" max="10" class="w-full rounded-md border border-slate-200 px-3 py-2 text-sm" value="3" /></div>
+          <div><label class="mb-1 block text-xs font-medium text-slate-600">出图提示词上限</label><input id="maxImagePromptChars" type="number" min="0" max="100000" class="w-full rounded-md border border-slate-200 px-3 py-2 text-sm" value="12000" /></div>
+          <label class="flex cursor-pointer items-start gap-1.5 text-sm text-slate-600"><input id="compressPrompt" type="checkbox" class="mt-0.5 rounded border-slate-300" checked /><span>提示词过长时压缩后再出图</span></label>
+        </div>
+        <div class="lg:col-span-2 rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
+          <h2 class="text-sm font-bold text-indigo-600 uppercase tracking-wider border-b pb-2">核心内容</h2>
+          <div><label class="mb-1 block text-sm font-medium text-slate-700">小说内容</label><textarea id="novelContent" rows="5" class="w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none resize-y" placeholder="粘贴小说内容..." onmouseup="saveTextareaSizes()"></textarea></div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div><label class="mb-1 block text-sm font-medium text-slate-700">视频滚动文本</label><textarea id="videoText" rows="3" class="w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none resize-y" placeholder="将显示在视频上的文字..." onmouseup="saveTextareaSizes()"></textarea></div>
+            <div><label class="mb-1 block text-sm font-medium text-slate-700">弹屏配色</label><select id="videoStyle" class="w-full rounded-md border border-slate-200 px-3 py-2 text-sm min-h-[42px]"><option value="random">随机黑白配色</option><option value="white_bg">白底黑字</option><option value="black_bg">黑底白字</option></select></div>
+          </div>
+          <div><label class="mb-1 block text-sm font-medium text-slate-700">最终提示词</label><textarea id="globalPrompt" rows="4" class="w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none resize-y" placeholder="欧美写实、光影..." oninput="saveApiConfig()" onmouseup="saveTextareaSizes()"></textarea></div>
+          <div class="space-y-2">
+            <button id="startBtn" type="button" onclick="startProduction()" class="w-full rounded-lg bg-indigo-600 py-3.5 text-base font-bold text-white shadow-sm transition-all hover:bg-indigo-700 active:scale-[0.98]">开始全自动生产</button>
+            <button id="cancelBtn" type="button" onclick="cancelProduction()" class="hidden w-full rounded-lg border-2 border-red-400 py-2 text-sm font-bold text-red-500 transition-all hover:bg-red-50 active:scale-[0.98]">取消当前生成任务</button>
           </div>
         </div>
       </div>
 
-      <div class="lg:col-span-2 space-y-6">
-        <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
-          <h2 class="text-sm font-bold text-indigo-600 uppercase tracking-wider border-b pb-2">3. 核心内容</h2>
-          <div>
-            <label class="mb-1 block text-sm font-medium text-slate-700">小说内容</label>
-            <textarea id="novelContent" rows="4" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none" placeholder="粘贴小说内容..."></textarea>
-          </div>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label class="mb-1 block text-sm font-medium text-slate-700">视频滚动文本</label>
-              <textarea id="videoText" rows="3" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none" placeholder="将显示在视频上的文字..."></textarea>
-            </div>
-            <div>
-              <label class="mb-1 block text-sm font-medium text-slate-700">弹屏配色</label>
-              <select id="videoStyle" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm min-h-[42px]">
-                <option value="random">随机黑白配色</option>
-                <option value="white_bg">白底黑字</option>
-                <option value="black_bg">黑底白字</option>
-              </select>
-            </div>
-          </div>
-          <div>
-            <label class="mb-1 block text-sm font-medium text-slate-700">最终提示词</label>
-            <textarea id="globalPrompt" rows="4" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none" placeholder="欧美写实、光影..." oninput="saveApiConfig()"></textarea>
-          </div>
+      <div id="resultSection" class="hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b pb-2"><h2 class="text-sm font-bold text-slate-800">生产成果</h2><div class="flex flex-wrap items-center gap-2"><span id="batchTag" class="rounded bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500 font-mono"></span><button type="button" id="downloadAllBtn" onclick="downloadAllAssets()" class="hidden rounded-md bg-slate-800 px-2 py-1 text-[10px] font-semibold text-white hover:bg-slate-900">下载全部</button></div></div>
+        <div id="statusNotice" class="rounded-md bg-blue-50 p-3 text-sm font-medium text-blue-800 whitespace-pre-wrap"></div>
+        <div id="warnBox" class="hidden rounded-md bg-amber-50 p-3 text-xs text-amber-900 whitespace-pre-wrap"></div>
+        <div id="imageGallery" class="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4"></div>
+        <div id="videoList" class="space-y-3"></div>
+      </div>
+    </div>
 
-          <div class="space-y-3">
-            <button id="startBtn" type="button" onclick="startProduction()" class="w-full rounded-xl bg-indigo-600 py-4 text-lg font-bold text-white shadow-lg transition-all hover:bg-indigo-700 active:scale-[0.98]">
-              开始全自动生产
-            </button>
-            <button id="cancelBtn" type="button" onclick="cancelProduction()" class="hidden w-full rounded-xl border-2 border-red-500 py-2 text-sm font-bold text-red-500 transition-all hover:bg-red-50 active:scale-[0.98]">
-              取消当前生成任务
-            </button>
+    <!-- ===== Tab 2: 手动出图 ===== -->
+    <div id="tab-manual" class="tab-panel hidden space-y-5">
+      <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
+        <h2 class="text-sm font-bold text-indigo-600 uppercase tracking-wider border-b pb-2">出图参数</h2>
+        <div><label class="mb-1 block text-sm font-medium text-slate-700">提示词</label><textarea id="manualPrompt" rows="5" class="w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none resize-y" placeholder="输入出图提示词..." onmouseup="saveTextareaSizes()"></textarea></div>
+        <div class="grid grid-cols-2 gap-4">
+          <div><label class="mb-1 block text-sm font-medium text-slate-700">比例类型</label><select id="manualRatio" class="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"><option value="single">带文本单图 (1:1)</option><option value="lr">左右分屏 (1:1)</option><option value="tb">上下分屏 (1:1)</option></select></div>
+          <div><label class="mb-1 block text-sm font-medium text-slate-700">生成数量</label><input id="manualCount" type="number" min="1" max="20" class="w-full rounded-md border border-slate-200 px-3 py-2 text-sm" value="1" /></div>
+        </div>
+        <button id="manualGenerateBtn" onclick="startManual()" class="w-full rounded-lg bg-indigo-600 py-3.5 text-base font-bold text-white shadow-sm transition-all hover:bg-indigo-700 active:scale-[0.98]">开始生成</button>
+      </div>
+      <div id="manualResultSection" class="hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
+        <h2 class="text-sm font-bold text-slate-800 border-b pb-2">生成结果</h2><div id="manualStatusMsg" class="text-sm text-slate-600"></div><div id="manualErrorBox" class="hidden rounded-md bg-red-50 p-3 text-xs text-red-800"></div><div id="manualImageGallery" class="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4"></div>
+      </div>
+    </div>
+
+    <!-- ===== Tab 3: 历史记录 ===== -->
+    <div id="tab-history" class="tab-panel hidden">
+      <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
+          <h2 class="text-xs font-bold text-emerald-600 uppercase tracking-wider">历史记录</h2>
+          <div class="flex flex-wrap items-center gap-2">
+            <select id="historyDateFilter" onchange="onHistoryFilterChange()" class="rounded-md border border-slate-200 px-2 py-1 text-[10px] outline-none"><option value="">全部日期</option></select>
+            <select id="historyTypeFilter" onchange="onHistoryFilterChange()" class="rounded-md border border-slate-200 px-2 py-1 text-[10px] outline-none">
+              <option value="">全部类型</option>
+              <option value="text_single">文本单图</option>
+              <option value="lr">左右分屏</option>
+              <option value="tb">上下分屏</option>
+              <option value="scroll">滚屏</option>
+              <option value="popup_bg">弹屏</option>
+            </select>
+            <button onclick="clearHistory()" class="rounded-md border border-red-300 px-2 py-1 text-[10px] text-red-500 hover:bg-red-50">清空</button>
           </div>
         </div>
-
-        <div id="resultSection" class="hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
-          <div class="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
-            <h2 class="text-lg font-bold text-slate-800">生产成果</h2>
-            <div class="flex flex-wrap items-center gap-2">
-              <span id="batchTag" class="rounded bg-slate-100 px-2 py-1 text-xs text-slate-500 font-mono"></span>
-              <button type="button" id="downloadAllBtn" onclick="downloadAllAssets()" class="hidden rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-900">
-                下载全部
-              </button>
-            </div>
-          </div>
-          <div id="statusNotice" class="rounded-lg bg-blue-50 p-4 text-sm font-medium text-blue-800 whitespace-pre-wrap"></div>
-          <div id="warnBox" class="hidden rounded-lg bg-amber-50 p-3 text-xs text-amber-900 whitespace-pre-wrap"></div>
-          <div id="imageGallery" class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4"></div>
-          <div id="videoList" class="space-y-4"></div>
-        </div>
-
-        <!-- history panel -->
-        <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
-          <div class="flex items-center justify-between border-b pb-2">
-            <h2 class="text-sm font-bold text-emerald-600 uppercase tracking-wider">历史记录</h2>
-            <div class="flex items-center gap-2">
-              <select id="historyDateFilter" onchange="onHistoryDateChange()" class="rounded border border-slate-300 px-2 py-1 text-[10px] outline-none">
-                <option value="">全部日期</option>
-              </select>
-              <button onclick="clearHistory()" class="rounded border border-red-300 px-2 py-1 text-[10px] text-red-500 hover:bg-red-50">清空</button>
-            </div>
-          </div>
-          <div id="historyList" class="max-h-96 overflow-y-auto space-y-2 text-xs">
-            <p class="text-slate-400">暂无记录...</p>
-          </div>
+        <div id="historyList" class="max-h-[calc(100vh-140px)] overflow-y-auto">
+          <p class="text-slate-400 text-xs">暂无记录...</p>
         </div>
       </div>
     </div>
-  </div>
+  </main>
 
   <script>
-    let lastPayloadUrls = [];
+    // ====== Tab Switching ======
+    function switchTab(name) {
+      document.querySelectorAll(".tab-panel").forEach(p => p.classList.add("hidden"));
+      const el = document.getElementById("tab-" + name);
+      if (el) el.classList.remove("hidden");
+      document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+      const btn = document.querySelector(`[data-tab="${name}"]`);
+      if (btn) btn.classList.add("active");
+      if (name === "history") { loadHistoryDates(); loadHistory(); }
+    }
 
+    // ====== Textarea Size Persistence ======
+    function saveTextareaSizes() {
+      const sizes = {};
+      ["novelContent", "videoText", "globalPrompt", "manualPrompt"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) sizes[id] = el.offsetHeight;
+      });
+      localStorage.setItem("novel_textarea_sizes", JSON.stringify(sizes));
+    }
+
+    function loadTextareaSizes() {
+      try {
+        const saved = JSON.parse(localStorage.getItem("novel_textarea_sizes"));
+        if (saved) {
+          Object.keys(saved).forEach(id => {
+            const el = document.getElementById(id);
+            if (el && saved[id]) el.style.height = saved[id] + "px";
+          });
+        }
+      } catch (e) {}
+    }
+    loadTextareaSizes();
+
+    // ====== Shared State ======
+    let lastPayloadUrls = [];
     const API_CONFIG_DEFAULTS = { apiKey: "", apiUrl: "https://api.geeknow.top/v1", chatModel: "gpt-4o-mini", imageModel: "gpt-image-1", globalPrompt: "" };
 
+    // ====== API Config Persistence ======
     function saveApiConfig() {
       let cfg = {};
       try { cfg = JSON.parse(localStorage.getItem("novel_api_config")) || {}; } catch (e) {}
@@ -166,7 +193,6 @@
       });
       localStorage.setItem("novel_api_config", JSON.stringify(cfg));
     }
-
     function loadApiConfig() {
       try {
         const saved = JSON.parse(localStorage.getItem("novel_api_config"));
@@ -177,17 +203,16 @@
           document.getElementById("imageModel").value = saved.imageModel || API_CONFIG_DEFAULTS.imageModel;
           document.getElementById("globalPrompt").value = saved.globalPrompt || "";
         }
-      } catch (e) { /* ignore */ }
+      } catch (e) {}
     }
     loadApiConfig();
 
+    // ====== Utils ======
     function absUrl(path) {
       if (!path) return "";
       if (path.startsWith("http")) return path;
-      const base = window.location.origin.replace(/\/$/, "");
-      return base + (path.startsWith("/") ? path : "/" + path);
+      return window.location.origin.replace(/\/$/, "") + (path.startsWith("/") ? path : "/" + path);
     }
-
     async function downloadBlobUrl(url, filename) {
       const res = await fetch(url, { credentials: "same-origin" });
       const blob = await res.blob();
@@ -199,91 +224,83 @@
       a.remove();
       URL.revokeObjectURL(a.href);
     }
-
     async function downloadAllAssets() {
       const btn = document.getElementById("downloadAllBtn");
       if (!lastPayloadUrls.length) return;
       btn.disabled = true;
-      try {
-        for (let i = 0; i < lastPayloadUrls.length; i++) {
-          const item = lastPayloadUrls[i];
-          await downloadBlobUrl(item.url, item.name);
-          await new Promise(r => setTimeout(r, 350));
-        }
-      } catch (e) {
-        alert("下载失败: " + e.message);
-      } finally {
-        btn.disabled = false;
-      }
+      try { for (const item of lastPayloadUrls) { await downloadBlobUrl(item.url, item.name); await new Promise(r => setTimeout(r, 350)); } }
+      catch (e) { alert("下载失败: " + e.message); }
+      finally { btn.disabled = false; }
     }
 
-    // --- Streaming image render ---
+    // ====== Image/Video Render ======
     function appendImageCard(src, label) {
       const gallery = document.getElementById("imageGallery");
       const full = absUrl(src);
       const name = src.split("/").pop();
       const wrap = document.createElement("div");
       wrap.className = "relative overflow-hidden rounded-lg border border-slate-200 bg-slate-100 animate-pulse";
-      wrap.innerHTML = `<img src="${full}" class="aspect-square w-full object-cover" loading="lazy" onload="this.parentElement.classList.remove('animate-pulse')" />
-        <div class="absolute top-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-[9px] text-white">${label || ""}</div>
-        <button type="button" class="absolute bottom-1 right-1 rounded bg-black/70 px-2 py-0.5 text-[10px] text-white hover:bg-black">下载</button>`;
+      wrap.innerHTML = `<img src="${full}" class="aspect-square w-full object-cover" loading="lazy" onload="this.parentElement.classList.remove('animate-pulse')" /><div class="absolute top-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-[9px] text-white">${label || ""}</div><button type="button" class="absolute bottom-1 right-1 rounded bg-black/70 px-2 py-0.5 text-[10px] text-white hover:bg-black">下载</button>`;
       wrap.querySelector("button").onclick = () => downloadBlobUrl(full, name);
       gallery.appendChild(wrap);
       lastPayloadUrls.push({ url: full, name: name });
       document.getElementById("downloadAllBtn").classList.remove("hidden");
     }
-
     function appendVideoCard(title, badge, src, btnLabel) {
       const videoList = document.getElementById("videoList");
       const full = absUrl(src);
       const name = src.split("/").pop();
       const row = document.createElement("div");
       row.className = "space-y-2";
-      row.innerHTML = `<div class="flex items-center gap-2"><span class="text-xs font-bold">${title}</span><span class="${badge} rounded px-2 py-0.5 text-[10px]">视频</span></div>
-        <div class="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
-          <video src="${full}" controls class="max-h-48 rounded"></video>
-          <button class="rounded bg-indigo-600 px-3 py-1 text-xs font-semibold text-white">${btnLabel}</button>
-        </div>`;
+      row.innerHTML = `<div class="flex items-center gap-2"><span class="text-xs font-bold">${title}</span><span class="${badge} rounded px-2 py-0.5 text-[10px]">视频</span></div><div class="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2"><video src="${full}" controls class="max-h-48 rounded"></video><button class="rounded bg-indigo-600 px-3 py-1 text-xs font-semibold text-white">${btnLabel}</button></div>`;
       row.querySelector("button").onclick = () => downloadBlobUrl(full, name);
       videoList.appendChild(row);
       lastPayloadUrls.push({ url: full, name: name });
       document.getElementById("downloadAllBtn").classList.remove("hidden");
     }
+    function appendManualImage(src) {
+      const gallery = document.getElementById("manualImageGallery");
+      const full = absUrl(src);
+      const name = src.split("/").pop();
+      const div = document.createElement("div");
+      div.className = "relative overflow-hidden rounded-lg border border-slate-200";
+      div.innerHTML = `<img src="${full}" class="aspect-square w-full object-cover" loading="lazy" /><button class="absolute bottom-1 right-1 rounded bg-black/70 px-2 py-0.5 text-[10px] text-white hover:bg-black">下载</button>`;
+      div.querySelector("button").onclick = () => downloadBlobUrl(full, name);
+      gallery.appendChild(div);
+    }
 
-    // --- History functions ---
+    // ====== History ======
+    function buildHistoryUrl() {
+      const date = document.getElementById("historyDateFilter").value;
+      const type = document.getElementById("historyTypeFilter").value;
+      let url = "/api/history";
+      const params = [];
+      if (date) params.push("date=" + encodeURIComponent(date));
+      if (type) params.push("type=" + encodeURIComponent(type));
+      if (params.length) url += "?" + params.join("&");
+      return url;
+    }
     async function loadHistory() {
       try {
-        const date = document.getElementById("historyDateFilter").value;
-        const url = date ? "/api/history?date=" + encodeURIComponent(date) : "/api/history";
-        const r = await fetch(url);
+        const r = await fetch(buildHistoryUrl());
         const data = await r.json();
         renderHistory(data);
       } catch (e) {
-        document.getElementById("historyList").innerHTML = '<p class="text-slate-400">加载失败</p>';
+        document.getElementById("historyList").innerHTML = '<p class="text-slate-400 text-xs">加载失败</p>';
       }
     }
-
     async function loadHistoryDates() {
       try {
         const r = await fetch("/api/history/dates");
         const dates = await r.json();
         const sel = document.getElementById("historyDateFilter");
-        const currentVal = sel.value;
+        const cur = sel.value;
         sel.innerHTML = '<option value="">全部日期</option>';
-        dates.forEach(d => {
-          const opt = document.createElement("option");
-          opt.value = d;
-          opt.textContent = d;
-          sel.appendChild(opt);
-        });
-        if (dates.includes(currentVal)) sel.value = currentVal;
-      } catch (e) { /* ignore */ }
+        dates.forEach(d => { const o = document.createElement("option"); o.value = d; o.textContent = d; sel.appendChild(o); });
+        if (dates.includes(cur)) sel.value = cur;
+      } catch (e) {}
     }
-
-    function onHistoryDateChange() {
-      loadHistory();
-    }
-
+    function onHistoryFilterChange() { loadHistory(); }
     function copyEncodedPrompt(el) {
       const text = decodeURIComponent(el.getAttribute("data-prompt"));
       navigator.clipboard.writeText(text).then(() => {
@@ -295,74 +312,104 @@
       }).catch(() => alert("复制失败"));
     }
 
+    function openManualWithPrompt(el) {
+      const promptText = decodeURIComponent(el.getAttribute("data-prompt"));
+      if (!confirm("是否用此提示词在手动出图中生成图片？")) return;
+      switchTab("manual");
+      document.getElementById("manualPrompt").value = promptText;
+    }
+
     function renderHistory(entries) {
       const list = document.getElementById("historyList");
       if (!entries || !entries.length) {
-        list.innerHTML = '<p class="text-slate-400">暂无历史记录</p>';
+        list.innerHTML = '<p class="text-slate-400 text-xs p-4">暂无历史记录</p>';
         return;
       }
-      // Show newest first
+      const typeLabel = { text_single: "文本单图", lr: "左右分屏", tb: "上下分屏", scroll: "滚屏", popup_bg: "弹屏" };
       const reversed = [...entries].reverse();
-      list.innerHTML = reversed.map((e, i) => {
-        const typeLabel = { text_single: "文本单图", lr: "左右分屏", tb: "上下分屏", scroll: "滚屏", popup_bg: "弹屏" }[e.type] || e.type;
+      list.innerHTML = `<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">${reversed.map(e => {
         const prompt = e.prompt || "";
-        const promptDisplay = prompt.length > 60 ? prompt.slice(0, 60) + "..." : prompt;
-        const promptTitle = prompt.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        return `<div class="flex gap-2 rounded border border-slate-100 p-2 hover:bg-slate-50">
-          <img src="${absUrl(e.image_url)}" class="h-16 w-16 rounded object-cover flex-shrink-0 cursor-pointer" onclick="window.open('${absUrl(e.image_url)}')" title="点击查看大图" />
-          <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-1"><span class="rounded bg-indigo-100 px-1 text-[10px] text-indigo-700">${typeLabel}</span><span class="text-[10px] text-slate-400">${e.timestamp}</span></div>
-            <div class="mt-0.5 flex items-center gap-1">
-              <p class="truncate text-[11px] text-slate-600 flex-1" title="${promptTitle}">${promptDisplay}</p>
-              <button onclick="copyEncodedPrompt(this)" data-prompt="${encodeURIComponent(prompt)}" class="flex-shrink-0 rounded border border-slate-300 px-1.5 py-0.5 text-[10px] text-slate-500 hover:bg-slate-100" title="复制提示词">复制</button>
+        const title = prompt.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        return `<div class="rounded-lg border border-slate-200 bg-white overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+          <img src="${absUrl(e.image_url)}" class="aspect-square w-full object-cover cursor-pointer" loading="lazy" onclick="window.open('${absUrl(e.image_url)}')" title="点击查看大图" />
+          <div class="p-2 space-y-1.5">
+            <div class="flex items-center gap-1">
+              <span class="rounded bg-indigo-100 px-1 text-[9px] text-indigo-700">${typeLabel[e.type] || e.type}</span>
+              <span class="text-[9px] text-slate-400">${e.timestamp}</span>
+            </div>
+            <p class="text-[10px] text-slate-600 leading-relaxed line-clamp-3" title="${title}">${prompt}</p>
+            <div class="flex gap-1.5">
+              <button onclick="copyEncodedPrompt(this)" data-prompt="${encodeURIComponent(prompt)}" class="flex-1 rounded border border-slate-300 px-2 py-1 text-[10px] text-slate-600 hover:bg-slate-50">复制提示词</button>
+              <button onclick="openManualWithPrompt(this)" data-prompt="${encodeURIComponent(prompt)}" class="flex-1 rounded bg-indigo-500 px-2 py-1 text-[10px] text-white hover:bg-indigo-600">去手动生成</button>
             </div>
           </div>
         </div>`;
-      }).join("");
+      }).join("")}</div>`;
     }
 
     async function clearHistory() {
       const date = document.getElementById("historyDateFilter").value;
-      const msg = date ? `确认清空 ${date} 的历史记录？` : "确认清空所有历史记录？";
+      const type = document.getElementById("historyTypeFilter").value;
+      let msg = "确认清空筛选后的历史记录？";
+      if (!date && !type) msg = "确认清空所有历史记录？";
       if (!confirm(msg)) return;
-      const url = date ? "/api/history/clear?date=" + encodeURIComponent(date) : "/api/history/clear";
+      const params = [];
+      if (date) params.push("date=" + encodeURIComponent(date));
+      const url = params.length ? "/api/history/clear?" + params.join("&") : "/api/history/clear";
       await fetch(url, { method: "POST" });
       renderHistory([]);
       loadHistoryDates();
     }
 
-    // --- Cancel ---
+    // ====== Cancel ======
     async function cancelProduction() {
-      const cancelBtn = document.getElementById("cancelBtn");
-      cancelBtn.innerText = "取消中...";
-      cancelBtn.disabled = true;
-      try {
-        await fetch("/api/cancel", { method: "POST" });
-      } catch (e) {
-        console.error("取消失败", e);
-      }
+      const btn = document.getElementById("cancelBtn");
+      btn.innerText = "取消中...";
+      btn.disabled = true;
+      try { await fetch("/api/cancel", { method: "POST" }); } catch (e) { console.error("取消失败", e); }
     }
 
-    // --- Main SSE streaming production ---
+    // ====== Manual Generation ======
+    async function startManual() {
+      const btn = document.getElementById("manualGenerateBtn");
+      const payload = {
+        api_key: document.getElementById("apiKey").value,
+        api_url: document.getElementById("apiUrl").value,
+        image_model_name: document.getElementById("imageModel").value,
+        prompt: document.getElementById("manualPrompt").value,
+        ratio: document.getElementById("manualRatio").value,
+        count: parseInt(document.getElementById("manualCount").value) || 1
+      };
+      if (!payload.prompt.trim()) { alert("请输入提示词"); return; }
+      if (!payload.api_key.trim()) { alert("请配置 API 密钥"); return; }
+      btn.disabled = true; btn.innerText = "生成中...";
+      document.getElementById("manualResultSection").classList.remove("hidden");
+      document.getElementById("manualStatusMsg").innerText = "正在生成...";
+      document.getElementById("manualImageGallery").innerHTML = "";
+      document.getElementById("manualErrorBox").classList.add("hidden");
+      try {
+        const r = await fetch("/api/generate-manual", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        const data = await r.json();
+        document.getElementById("manualStatusMsg").innerText = data.message || "完成";
+        if (data.errors && data.errors.length) { document.getElementById("manualErrorBox").innerText = data.errors.join("\n"); document.getElementById("manualErrorBox").classList.remove("hidden"); }
+        (data.images || []).forEach(src => appendManualImage(src));
+      } catch (e) { document.getElementById("manualStatusMsg").innerText = "请求失败: " + e.message; }
+      finally { btn.disabled = false; btn.innerText = "开始生成"; }
+    }
+
+    // ====== Auto SSE Production ======
     async function startProduction() {
       const btn = document.getElementById("startBtn");
       const cancelBtn = document.getElementById("cancelBtn");
       const resultSection = document.getElementById("resultSection");
       const statusNotice = document.getElementById("statusNotice");
-
-      btn.disabled = true;
-      cancelBtn.classList.remove("hidden");
-      cancelBtn.disabled = false;
-      cancelBtn.innerText = "取消当前任务";
-      btn.innerHTML = `<span class="flex items-center justify-center"><svg class="loading-spin h-5 w-5 mr-2" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> 生成中...</span>`;
+      btn.disabled = true; cancelBtn.classList.remove("hidden"); cancelBtn.disabled = false; cancelBtn.innerText = "取消当前任务";
+      btn.innerHTML = `<span class="flex items-center justify-center"><svg class="loading-spin h-4 w-4 mr-2" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> 生成中...</span>`;
 
       const payload = {
-        api_key: document.getElementById("apiKey").value,
-        api_url: document.getElementById("apiUrl").value,
-        chat_model_name: document.getElementById("chatModel").value,
-        image_model_name: document.getElementById("imageModel").value,
-        novel_content: document.getElementById("novelContent").value,
-        prompt: document.getElementById("globalPrompt").value,
+        api_key: document.getElementById("apiKey").value, api_url: document.getElementById("apiUrl").value,
+        chat_model_name: document.getElementById("chatModel").value, image_model_name: document.getElementById("imageModel").value,
+        novel_content: document.getElementById("novelContent").value, prompt: document.getElementById("globalPrompt").value,
         video_text: document.getElementById("videoText").value,
         text_single_count: parseInt(document.getElementById("textSingleCount").value) || 0,
         lr_split_count: parseInt(document.getElementById("lrSplitCount").value) || 0,
@@ -374,90 +421,42 @@
         max_image_prompt_chars: parseInt(document.getElementById("maxImagePromptChars").value) || 12000,
         max_concurrent: parseInt(document.getElementById("maxConcurrent").value) || 3
       };
-
       try {
         resultSection.classList.remove("hidden");
-        document.getElementById("batchTag").innerText = "批次 -";
-        statusNotice.innerText = "正在生成...";
-        document.getElementById("imageGallery").innerHTML = "";
-        document.getElementById("videoList").innerHTML = "";
-        document.getElementById("warnBox").classList.add("hidden");
-        document.getElementById("downloadAllBtn").classList.add("hidden");
+        document.getElementById("batchTag").innerText = "批次 -"; statusNotice.innerText = "正在生成...";
+        document.getElementById("imageGallery").innerHTML = ""; document.getElementById("videoList").innerHTML = "";
+        document.getElementById("warnBox").classList.add("hidden"); document.getElementById("downloadAllBtn").classList.add("hidden");
         lastPayloadUrls = [];
-
-        const resp = await fetch("/api/generate-stream", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        });
-
-        if (!resp.ok) {
-          throw new Error("HTTP " + resp.status);
-        }
-
-        const reader = resp.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-
+        const resp = await fetch("/api/generate-stream", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        if (!resp.ok) throw new Error("HTTP " + resp.status);
+        const reader = resp.body.getReader(); const decoder = new TextDecoder(); let buffer = "";
         while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+          const { done, value } = await reader.read(); if (done) break;
           buffer += decoder.decode(value, { stream: true });
-
-          // Parse SSE events from buffer
           while (true) {
-            const idx = buffer.indexOf("\n\n");
-            if (idx === -1) break;
-            const block = buffer.slice(0, idx);
-            buffer = buffer.slice(idx + 2);
-
-            const lines = block.split("\n");
-            let eventType = "";
-            let dataStr = "";
-            for (const line of lines) {
-              if (line.startsWith("event: ")) eventType = line.slice(7);
-              if (line.startsWith("data: ")) dataStr = line.slice(6);
-            }
-
+            const idx = buffer.indexOf("\n\n"); if (idx === -1) break;
+            const block = buffer.slice(0, idx); buffer = buffer.slice(idx + 2);
+            const lines = block.split("\n"); let eventType = "", dataStr = "";
+            for (const line of lines) { if (line.startsWith("event: ")) eventType = line.slice(7); if (line.startsWith("data: ")) dataStr = line.slice(6); }
             if (!dataStr) continue;
-            let data;
-            try { data = JSON.parse(dataStr); } catch (e) { continue; }
-
-            if (eventType === "status") {
-              document.getElementById("batchTag").innerText = "批次 " + (data.batch_id || "");
-              statusNotice.innerText = data.message || "";
-            } else if (eventType === "image") {
-              appendImageCard(data.url, data.label);
-              statusNotice.innerText = `已生成 ${data.done}/${data.total}`;
-            } else if (eventType === "video") {
-              appendVideoCard(data.label || "视频", "bg-sky-100 text-sky-800", data.url, "下载视频");
-            } else if (eventType === "popup_video") {
-              appendVideoCard(data.label || "弹屏", "bg-violet-100 text-violet-800", data.url, "下载弹屏");
-            } else if (eventType === "error") {
-              console.error("服务端错误:", data.message);
-            } else if (eventType === "done") {
+            let data; try { data = JSON.parse(dataStr); } catch (e) { continue; }
+            if (eventType === "status") { document.getElementById("batchTag").innerText = "批次 " + (data.batch_id || ""); statusNotice.innerText = data.message || ""; }
+            else if (eventType === "image") { appendImageCard(data.url, data.label); statusNotice.innerText = "已生成 " + data.done + "/" + data.total; }
+            else if (eventType === "video") { appendVideoCard(data.label || "视频", "bg-sky-100 text-sky-800", data.url, "下载视频"); }
+            else if (eventType === "popup_video") { appendVideoCard(data.label || "弹屏", "bg-violet-100 text-violet-800", data.url, "下载弹屏"); }
+            else if (eventType === "error") { console.error("服务端错误:", data.message); }
+            else if (eventType === "done") {
               document.getElementById("batchTag").innerText = "批次 " + (data.batch_id || "");
               statusNotice.innerText = (data.status === "failed" ? "生成失败 " : "") + (data.message || "");
-              if (data.warnings && data.warnings.length) {
-                document.getElementById("warnBox").innerText = data.warnings.join("\n");
-                document.getElementById("warnBox").classList.remove("hidden");
-              }
-              // Refresh history
-              loadHistory();
-              loadHistoryDates();
+              if (data.warnings && data.warnings.length) { document.getElementById("warnBox").innerText = data.warnings.join("\n"); document.getElementById("warnBox").classList.remove("hidden"); }
             }
           }
         }
-      } catch (error) {
-        alert("请求失败: " + error.message);
-      } finally {
-        btn.disabled = false;
-        btn.innerText = "开始全自动生产";
-        cancelBtn.classList.add("hidden");
-      }
+      } catch (error) { alert("请求失败: " + error.message); }
+      finally { btn.disabled = false; btn.innerText = "开始全自动生产"; cancelBtn.classList.add("hidden"); }
     }
 
-    // Load history and dates on page start
+    // Init
     loadHistoryDates();
     loadHistory();
   </script>
